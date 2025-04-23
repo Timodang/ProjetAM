@@ -2,7 +2,6 @@ import abc
 import pandas as pd
 import numpy as np
 import statsmodels.api as sm
-from skimage.filters import window
 from sqlalchemy.dialects.postgresql import array
 
 from src.classes.weighting_scheme import EquallyWeighting, RankingWeightingSignals, MaxSharpeWeighting
@@ -13,6 +12,12 @@ class Strategy(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def __init__(self, returns: pd.DataFrame, universe: pd.DataFrame, weight_scheme: str, quantile:float) -> None:
+        """
+        :param returns: Rendement à utiliser pour calculer les signaux d'achat
+        :param universe: Composition de l'univers d'investissement sur la période considérée
+        :param weight_scheme: schéma de pondération à utiliser
+        :param quantile: quantile à utiliser dans le cas d'un ranking
+        """
         self.returns: pd.DataFrame = returns
         self.universe: pd.DataFrame = universe
         self.weight_scheme: str = weight_scheme
@@ -20,14 +25,20 @@ class Strategy(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def get_position(self) -> list:
+        """
+        Méthode pour récupérer les positions du portefeuilles à la suite de la mise en oeuvre de la stratégie
+        :return:
+        """
         pass
 
     @staticmethod
     def _clean_returns(returns: pd.DataFrame, universe:pd.DataFrame) -> (pd.DataFrame, array[bool]):
         """
-        Méthode permettant de ne conserver que les actifs pour lesquels toutes les données sont disponibles
-        afin de réaliser les calculs sur la stratégie
-        :return:
+        Méthode permettant de ne conserver qu'une partie des actifs à la date de mise en oeuvre de la stratégie, à savoir :
+        - Les actifs qui figurent toujours dans l'univers d'investissement
+        - Les actifs pour lesquelles toutes les données nécessaires au calcul des signaux sont disponibles
+        :return: Un dataframe contenant les rendements qui sont utilisés pour la mise en oeuvre de la stratégie et
+        un vecteur permettant de savoir si un actif est utilisé ou non
         """
 
         # Dans le cas où il y a des valeurs infinies, on les remplace à 0
@@ -52,15 +63,7 @@ class Strategy(metaclass=abc.ABCMeta):
 
 class Momentum(Strategy):
     """
-    Classe qui implémente une stratégie Momentum basée sur les rendements des actifs. Deux solutions sont proposées :
-        - on classe les actifs qui montent "du plus fort" au moins fort / qui baissent, et on alloue des poids en fonction du rang ;
-        - on prend les actifs qui montent et leur allouons un poids "équipondéré"
-
-    Attributs :
-    ---
-        returns : dataframe contenant les rendements considérés.
-        isEquiponderated : booléen indiquant si les parts sont calculées de manière équipondérée ou non.
-    ---
+    Classe qui implémente une stratégie Momentum basée sur les rendements des actifs.
     """
 
     def __init__(self, returns: pd.DataFrame, universe: pd.DataFrame, weight_scheme: str, quantile:float) -> None:
@@ -79,7 +82,8 @@ class Momentum(Strategy):
 
         # Retraitement des rendements
         returns, index_missing_data = self._clean_returns(self.returns, self.universe)
-
+        if round(returns.iloc[0,0],4)==0.0245:
+            print("a")
         # Dans le cas d'un momentum qui n'est pas mean-revert, on ne conserve pas la dernière valeur (données mensuelles)
         if returns.shape[0] > 1:
             returns = returns.iloc[:-1,:]
@@ -106,6 +110,7 @@ class Momentum(Strategy):
         weights_array[index_missing_data == False] = weights_momentum
         list_weights:list = weights_array.tolist()
 
+        # check pour vérifier que la somme des poids est approximativement égale à 1
         check_weight = np.sum(list_weights)
         if round(check_weight, 5) != 1:
             raise Exception("Erreur dans le calcul des poids. La somme des poids doit être égale à 1")
@@ -154,7 +159,7 @@ class IdiosyncraticMomentum(Strategy):
         # Retraitement des rendements
         returns, index_missing_data = self._clean_returns(self.returns, self.universe)
 
-        # Première étape : Importation des facteurs de FF (ou du bench, à voir)
+        # Première étape : Importation du benchmark (éventuellement des série de facteurs FF d'AQR)
         df_factors: pd.DataFrame = self.bench_ret
         # df_factors: pd.DataFrame = self._import_ff_factors()
 
@@ -168,15 +173,11 @@ class IdiosyncraticMomentum(Strategy):
         res = result.resid
 
         # Quatrième étape : récupération des signaux (= les résidus)
-        test = res.iloc[-self.window:-1]
-        test1 = np.sum(res.iloc[-12:-1])
-        test2 = np.std(res.iloc[-12:-1])
-
-        # A ADAPTER
         if self.window == 1:
-            # Sur du mean revert : on n'a qu'un résidu et on multiplie par -1 pour être long sur les winners
+            # Sur du mean revert : on n'a qu'un résidu et on multiplie par -1 pour être long sur les loser
             signals_id_momentum = -1 * res.iloc[-1]
         else:
+            # Calcul du signal mean-revert
             signals_id_momentum =  np.sum(res.iloc[-12:-1])/np.std(res.iloc[-12:-1])
 
         # Cinquième étape : calcul des poids
@@ -184,7 +185,7 @@ class IdiosyncraticMomentum(Strategy):
         if self.weight_scheme == Strategy.RANKING_LABEL:
             ranking_instance: RankingWeightingSignals = RankingWeightingSignals(self.quantile)
             weights: list = ranking_instance.compute_weights(signals_id_momentum)
-
+        # Cas où l'utilisateur souhaite réaliser une allocation équipondérée
         elif self.weight_scheme == Strategy.EQUALWEIGHT_LABEL:
             equalweight_instance: EquallyWeighting = EquallyWeighting(self.quantile)
             weights: list = equalweight_instance.compute_weights(signals_id_momentum)
@@ -204,11 +205,6 @@ class IdiosyncraticMomentum(Strategy):
 class MaxSharpe(Strategy):
     """
     Classe qui implémente une stratégie Max Sharpe ratio basée sur les rendements des actifs.
-    Attributs :
-    ---
-        returns : dataframe contenant les rendements considérés.
-        isEquiponderated : booléen indiquant si les parts sont calculées de manière équipondérée ou non.
-    ---
     """
 
     def __init__(self, returns: pd.DataFrame, universe: pd.DataFrame, weight_scheme: str, quantile:float) -> None:
@@ -226,10 +222,6 @@ class MaxSharpe(Strategy):
 
         # Retraitement des rendements
         returns, index_missing_data = self._clean_returns(self.returns, self.universe)
-
-        # Dans le cas d'un momentum qui n'est pas mean-revert, on ne conserve pas la dernière valeur (données mensuelles)
-        if returns.shape[0] > 1:
-            returns = returns.iloc[:-1,:]
 
         # Réalisation d'une allocation par max sharpe
         max_sharpe_instance: MaxSharpeWeighting = MaxSharpeWeighting()

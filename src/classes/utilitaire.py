@@ -26,20 +26,12 @@ class Utils:
         if method not in ["discret","continu"]:
             raise Exception(f"La méthode {method} n'est pas implémentée pour le calcul des rendements. Veuillez modifier ce paramètre")
 
-        # Récupération des données de fin de période
-        period_resampling: dict = {
-            "monthly": 'ME',
-            "quarterly": 'QE',
-            "yearly": 'YE'
-        }
-        resampled_data: pd.DataFrame = asset_prices.resample(period_resampling[periodicity_returns]).last()
-
         # Les valeurs manquantes sont conservés pour prendre en compte des entrées / sorties de titres de l'indice
         returns: pd.DataFrame = asset_prices.pct_change() if (method == 'discret') else np.log(asset_prices).diff()
 
-        # Retraitement des rendements
+        # Retraitement des rendements  liés à l'entrée / sortie des valeurs de l'univers d'investissement
         returns.replace(-1, np.nan, inplace=True)
         returns.replace(np.inf, np.nan, inplace=True)
 
-        # La première ligne n'est pas conservée (pas de rendements)
+        # La première date n'est pas conservée
         return returns.iloc[1:returns.shape[0], ]

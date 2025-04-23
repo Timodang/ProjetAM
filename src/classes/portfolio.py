@@ -3,8 +3,6 @@ import numpy as np
 import datetime as datetime
 from operator import add
 
-from dateutil.relativedelta import relativedelta
-
 from src.classes.strategies import  Momentum, MaxSharpe, IdiosyncraticMomentum
 from src.classes.utilitaire import Utils
 
@@ -31,23 +29,29 @@ class Portfolio:
     SECTOR_LABEL = "sectorial"
 
     """
-    Classe qui s'occupe des différentes métriques et de la composition des portefeuilles pour chaque pilier.
-    Arguments : 
-        - asset_prices : dataframe contenant les prix des actifs de l'univers considéré pour ce pilier, 
-        - periodicity : période pour le calcul des rendements (daily, weekly, monthly, quarterly, yearly)
-        - rebalancement : fréquence pour le calcul de la date de rebalancement
-        - method : méthode pour le calcul des rendements (discret, continu)
-        - list_strat : liste des stratégies à appliquer dans la poche d'alpha
-        - list_weighting : liste des schémas de pondération à appliquer pour chaque stratégie de la poche d'alpha
-        - calculation_window : taille de la fenêtre à utiliser pour les stratégies d'alpha
-        - asset_class : classe d'actif pour laquelle on effectue le backtest (equity, bond, ...)
+    Classe utilisée pour construire un portefeuille et effectuer un backtest sur 
+    une stratégie donnée
     """
 
     def __init__(self, df_prices: pd.DataFrame, universe:pd.DataFrame, bench:pd.DataFrame, dict_sector: dict,
                  periodicity: str, rebalancement: str, method: str,
                  strat: str, weighting: str, calculation_window: int, quantile: float, segmentation:str = None):
+        """
+        :param df_prices: DataFrame contenant les prix de tous les actifs sur la période d'étude
+        :param universe: DataFrame contenant la composition de l'univers d'investissement à chaque date
+        :param bench: DataFrame contenant la valeur du benchmark à chaque date
+        :param dict_sector: Dictionnaire contenant la segmentation sectorielle du portefeuille
+        :param periodicity: Fréquence des données pour le calcul des rendements
+        :param rebalancement: Fréquence de rebalancement de la stratégie
+        :param method: Méthode pour le calcul des rendements
+        :param strat: Nom de la stratégie à backtester
+        :param weighting: Méthode de pondération utilisée
+        :param calculation_window: taille de la fenêtre
+        :param quantile: quantile utilisé pour le calcul des poids dans un schéma de ranking
+        :param segmentation: segmentation sectorielle du portefeuille
+        """
 
-        # Vérifications de cohérence
+        # Checks de cohérence
         if periodicity.lower() not in Portfolio.PERIODICITY_LABELS:
             raise Exception(
                 f"La périodicité pour le calcul des rendements doit être l'une des suivantes : {Portfolio.PERIODICITY_LABELS}.")
@@ -84,15 +88,17 @@ class Portfolio:
         # Calcul des rendements
         self.returns:pd.DataFrame = self.utils.compute_asset_returns(self.asset_prices, self.periodicity, self.method)
 
-        # Calcul de l'allocation du portefeuille à chaque date
+        # Composition du portefeuille à chaque date
         self.positions: pd.DataFrame = pd.DataFrame()
 
-        # Calcul de la NAV du portefeuille (= valeur du pilier)
+        # NAV du portefeuille à chaque date
         self.portfolio_value: pd.Series = pd.Series()
 
     def run_backtest(self):
         """
-        Méthode permettant de réaliser le backtest et de récupérer les positions et la NAV du fonds
+        Méthode permettant de réaliser le backtest en calculant les positions de chaque titre
+        et le valeur du portefeuille
+        :return:
         """
 
         # 1ere étape : calcul des poids
@@ -103,13 +109,13 @@ class Portfolio:
         portfolio_value: list = self.compute_portfolio_value()
         self.portfolio_value = pd.DataFrame(portfolio_value, columns = ["Nav"], index = self.positions.index)
 
-    def rebalancing_date_2(self, serie_date:pd.Series, index:int) -> datetime:
+    def rebalancing_date(self, serie_date:pd.Series, index:int) -> datetime:
         """
         Méthode permettant de déterminer la prochaine date de rebalancement à partir d'une liste de données mensuelles
         contenant toutes les dates de la période d'étude
-        :param serie_date:
-        :param index:
-        :return:
+        :param serie_date: ensemble de dates de la période d'étude
+        :param index: indice de la date actuelle
+        :return: la prochaine date de rebalancement
         """
 
         if self.rebalancement == Portfolio.MONTHLY_LABEL:
@@ -121,25 +127,6 @@ class Portfolio:
         else:
             raise Exception("Fréquence de rebalancement non implémentée")
         return new_date
-
-
-    def rebalancing_date(self, prec_date: datetime = None) -> datetime:
-        """
-        Méthode permettant de calculer la nouvelle date de rebalancement
-        à partir de la date de rebalancement précédente
-        """
-
-        # On rebalance à la première itération du backtest (=> à voir, peut équipondérer sinon)
-        if self.rebalancement == Portfolio.MONTHLY_LABEL:
-            next_rebalancing_date: datetime = prec_date + relativedelta(months=1)
-        elif self.rebalancement == Portfolio.QUARTERLY_LABEL:
-            next_rebalancing_date: datetime = prec_date + relativedelta(months=3)
-        elif self.rebalancement == Portfolio.YEARLY_LABEL:
-            next_rebalancing_date: datetime = prec_date + relativedelta(years=1)
-        else:
-            raise Exception("La fréquence de rebalancement souhaitée n'est pas implémentée")
-
-        return next_rebalancing_date
 
     def _rebal_to_index(self) -> int:
         """
@@ -159,8 +146,7 @@ class Portfolio:
 
     def build_portfolio(self) -> pd.DataFrame:
         """
-        Méthode  pour calculer la valeur du portefeuille
-        strategy : Momentum
+        Méthode  permettant de déterminer les positions du portefeuilles à chaque date
         """
 
         # récupération de l'indice des rebalancements
@@ -169,13 +155,13 @@ class Portfolio:
         # On récupère le nombre de rendements disponibles
         length: int = self.returns.shape[0]
 
-        # Récupération de la première date de rebalancement
-        rebalancing_date: datetime = self.returns.index[self.calculation_window]
-        # premier indice à partir duquel on réalise les calculs
-        # index_strat: int = self.calculation_window * 3
+        # premier indice à partir duquel on réalise les calculs (on commence arbitrairement au bout de 3 ans dans un soucis de comparaison p/r
+        # à la stratégie de Momentum idiosyncratique)
         index_strat: int = 36
+        # Récupération de la première date de rebalancement
+        rebalancing_date: datetime = self.returns.index[index_strat]
 
-        # Initialisation du dataframe de positions / poids
+        # Initialisation du dataframe pour stocker les positions / poids
         positions: pd.DataFrame = pd.DataFrame(0.0, index=self.returns.index,
                                                columns=self.returns.columns)
 
@@ -185,17 +171,16 @@ class Portfolio:
             # Récupération de la date courante
             date: datetime = self.returns.index[idx]
 
-            # 1ere étape : Calcul des poids du portefeuille
+            # Calcul des poids du portefeuille
             # 1er cas : date >= date de rebalancement ==> on rebalance
             if date >= rebalancing_date:
 
                 # Récupération du premier indice pour le calcul des rendements
-                # begin_idx: int = idx - self.calculation_window * 3
                 begin_idx: int = idx - 36
 
-                # Calcule de la nouvelle date de rebalancement tant qu'on est pas à la dernière date
+                # Calcule de la nouvelle date de rebalancement (si disponible)
                 if idx < length - int_rebal_freq:
-                    rebalancing_date = self.rebalancing_date_2(self.returns.index, idx)
+                    rebalancing_date = self.rebalancing_date(self.returns.index, idx)
 
                 # Récupération des signaux associés à cette date selon les stratégies / schémas implémentés
                 positions.iloc[idx, :] = self._compute_portfolio_position(
@@ -203,12 +188,12 @@ class Portfolio:
                     self.weighting)
 
             # 2e cas : la date n'est pas une date de rebalancement
-            # Récupération des poids précédents et calcul des nouveaux poids
+            # Récupération des poids précédents et calcul des nouveaux poids (dérive du portefeuille)
             else:
                 prec_weights: list = positions.iloc[idx - 1, :]
                 positions.iloc[idx, :] = self.compute_portfolio_derive(idx, prec_weights)
 
-        # On ne conserve pas les dates inférieures avant la première date de rebalancement
+        # On ne conserve pas les dates antérieures à la première date de rebalancement
         positions = positions.iloc[index_strat:, ]
         return positions
 
@@ -216,16 +201,17 @@ class Portfolio:
         """
         Méthode permettant de déterminer le poids du portefeuille à chaque période de rebalancement
         en appliquant une éventuelle segmentation sectorielle
-        :param returns_to_use:
-        :param strategy:
-        :param weighting:
-        :return:
+        :param returns_to_use: DataFrame contenant les rendements pertiennts pour le calcul des poids
+        :param strategy: nom de la stratégie à utiliser
+        :param weighting: schéma de pondération à utiliser
+        :return: Une liste contenant les poids du portefeuille pour la date courante
         """
 
         # Gestion des erreurs pour déterminer si l'utilisateur souhaite réaliser une segmentation sectorielle ou non
         if self.segmentation != Portfolio.SECTOR_LABEL and self.segmentation is not None:
             raise Exception("Segmentation non implémentée")
         elif self.segmentation is None:
+            # Calcul des poids sans segmentation sectorielle
             return self._get_weight(returns_to_use, strategy, weighting)
         else:
             # Récupération du nombre de secteurs
@@ -239,7 +225,7 @@ class Portfolio:
 
             # boucle sur les secteurs
             for key, value in self.dict_sectors.items():
-                # Récupération des titres à utiliser
+                # Récupération des titres à utiliser pour le secteur étudier
                 df_prices_sector: pd.DataFrame = value
 
                 # Calcul des rendements et alignement pour ne conserver que les dates de la période d'étude
@@ -249,7 +235,7 @@ class Portfolio:
                 # Calcul des poids pour la stratégie
                 list_weights_sector: list = self._get_weight(ret_sectors, strategy, weighting)
 
-                # Ajout à la liste des poids finaux du portefeuille pour la date considéré
+                # Ajout à la liste des poids finaux du portefeuille pour la date considérée
                 list_weight_sector = [weight * scaling_factor for weight in list_weights_sector]
                 list_weights_ptf = list(map(add, list_weights_ptf, list_weight_sector))
 
@@ -269,7 +255,7 @@ class Portfolio:
         if weighting not in Portfolio.WEIGHTING_LABELS:
             raise Exception("Schéma de pondération non implémenté")
 
-        # distinction selon les différentes stratégies implémentées : Momentul
+        # distinction selon les différentes stratégies implémentées : Momentum
         if strategy == Portfolio.MOMENTUM_LABEL:
             strategy_instance: Momentum = Momentum(returns_to_use.iloc[-self.calculation_window:], self.universe,
                                                     weighting, self.quantile)
@@ -278,7 +264,7 @@ class Portfolio:
             # Calcul des rendements du benchmark (= facteur de risque du momentum idiosyncratique)
             ret_bench: pd.DataFrame = self.utils.compute_asset_returns(self.bench, self.periodicity, self.method)
             strategy_instance: IdiosyncraticMomentum = IdiosyncraticMomentum(returns_to_use, self.universe,ret_bench,
-                                                    weighting, self.quantile)
+                                                    weighting, self.quantile, self.calculation_window)
         # Stratégie Max Sharpe
         elif strategy == Portfolio.MAX_SHARPE_LABEL:
             strategy_instance: MaxSharpe = MaxSharpe(returns_to_use.iloc[-self.calculation_window:], self.universe,
@@ -295,12 +281,13 @@ class Portfolio:
         """
         Méthode permettant de calculer la dérive des poids entre deux dates de rebalancement dans le cas d'un
         portefeuille long only
-        :param idx:
-        :param list_prec_weights:
-        :return:
+        :param idx: indice de la date en cours
+        :param list_prec_weights: liste contenant les positions du portefeuille à la date précédente
+        :return: liste contenant les positions du portefeuille à la date courante
         """
 
-        # récupération des rendements en remplaçant les valeurs manquantes par des 0 pour les calculs
+        # récupération des rendements en remplaçant les valeurs manquantes / -Inf par des 0 pour les calculs
+        # Retraitements nécessaires en raison des entrées / sorties de titres de l'univers d'investissement
         returns:pd.DataFrame = self.returns.fillna(0)
         returns.replace(-np.inf, 0, inplace=True)
 
@@ -318,7 +305,7 @@ class Portfolio:
         ptf_ret: float = np.sum(np.multiply(list_prec_weights, list_prec_ret))
         tot_ret: float = 1 + ptf_ret
 
-        # Etape 3 : calcul des poids
+        # Etape 3 : calcul des nouveaux poids
         for i in range(len(list_prec_weights)):
             old_weight: float = list_prec_weights[i]
             tot_ret_asset: float = 1 + list_prec_ret[i]
@@ -330,7 +317,7 @@ class Portfolio:
         """
         Méthode permettant de calculer la NAV du portefeuille à chaque période
         :param initial_value: valeur initiale du portefeuille (base 100)
-        :return:
+        :return: Liste contenant la valeur du portefeuille à chaque date
         """
 
         # Copie des rendements et des positions
@@ -348,7 +335,7 @@ class Portfolio:
         if returns.isna().any().any():
             raise ValueError("éLes prix contiennent des valeurs manquanters. Vérifiez les entrées dans 'returns'. ")
 
-        # Création d'une série pour stocker les NAV du portefeuille
+        # Création d'une série pour stocker les NAV du portefeuille (première valeur = 100 par défaut)
         portfolio_value: list = [initial_value]
 
         # Boucle sur les dates à partir de t=1 car nous avons besoin des rendements en t
@@ -357,65 +344,14 @@ class Portfolio:
             # récupération de l'indice pour les rendements (rendement en t + window - 1 pour la NAV en t)
             ret_idx: int = self.calculation_window + (t - 1)
 
-            # Pb avec le calcul de la valeur (= multiplication de matrice)
+            # Récupération des rendements de la période précédente
             list_asset_returns: list = returns.iloc[ret_idx, :].values.tolist()
+            # Récupération des rendements de la période précédente
             list_weight: list = positions.iloc[t - 1].values.tolist()
+            # Calcul du rendement du portefeuille à la période précédente
             weighted_returns: float = np.sum(np.multiply(list_weight, list_asset_returns))
+            # Calcul de la nouvelle valeur du portefeulle
             portfolio_value.append(portfolio_value[-1] * (1+weighted_returns))
         return portfolio_value
-
-    # old
-    """
-    def compute_ptf_weight(self, returns_to_use: pd.DataFrame, list_strategies: list, list_weighting: list) -> list:
-
-        Méthode permettant de générer les poids d'un portefeuille
-        à une date t à partir des poids générés par plusieurs stratégies.
-
-        Hypothèse : chaque stratégie représente le même poids dans le portefeuille
-        final (peut être optimisé)
-
-        arguments :
-        - list_strategies : liste contenant les stratégies à appliquer au sein du portefeuille
-        - list_weighting : liste contenant les schémas de pondérations à appliquer au sein du portefeuille
-
-        # pondération de chaque stratégie dans le portefeuille
-        # a adapter pour la semgnetation
-        scaling_factor: float = 1.0 / len(list_strategies)
-
-        # Liste pour stocker les poids du portefeuille
-        list_weights_ptf: list = [0] * returns_to_use.shape[1]
-
-        # boucle sur les stratégies
-        for i in range(len(list_strategies)):
-            # récupération de la stratégie et du schéma de pondération associé
-            strat: str = list_strategies[i]
-            weighting: str = list_weighting[i]
-
-            if strat not in Portfolio.STRAT_LABELS:
-                raise Exception("Stratégie non implémentée")
-
-            if weighting not in Portfolio.WEIGHTING_LABELS:
-                raise Exception("Schéma de pondération non implémenté")
-
-            # distinction selon les différentes stratégies implémentées
-            if strat == Portfolio.STRAT_LABELS[0]:
-                strategy_instance: Momentum = Momentum(returns_to_use,
-                                                       weighting, self.quantile)
-            # Ajouter un cas pour chaque stratégie
-            else:
-                raise Exception("To be implemented")
-
-            list_weight_strat: list = strategy_instance.get_position()
-            if len(list_weight_strat) != len(list_weights_ptf):
-                raise Exception(
-                    "Les séries de poids générés par les stratégies / le portefeuille doivent avoir la même longueur")
-
-            # Mettre à jour les poids au sein du portefeuille
-            list_weight_strat = [weight * scaling_factor for weight in list_weight_strat]
-            list_weights_ptf = list(map(add, list_weights_ptf, list_weight_strat))
-
-        return list_weights_ptf
-    """
-
 
 

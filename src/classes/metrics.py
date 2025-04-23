@@ -12,14 +12,14 @@ class Metrics:
 
     """
     Classe permettant de calculer un ensemble de métriques de performance et de risque pour un portefeuille
-    Inputs : 
-        - ptf_nav, une liste contenant l'évolution de la NAV du portefeuille dans le temps
-        - method : méthode pour calculer les rendements
-        - frequency : fréquence à utiliser pour le calcul des métriques
-        - benchmark : dataframe contenant le benchmark si on souhaite utiliser cette classe
-        pour faire des comparaisons portefeuille / benchmark
     """
     def __init__(self, ptf_nav:pd.DataFrame, method:str, frequency:str, benchmark:pd.DataFrame = None):
+        """
+        :param ptf_nav: DataFrame contenant la NAV du portefeuille à chaque date
+        :param method: méthode de calcul des rendements
+        :param frequency: fréquence des données pour le calcul des rendements
+        :param benchmark: DataFrame contenant la NAV du benchmark du portefeuille
+        """
         self.nav: pd.DataFrame = ptf_nav
         self.bench: pd.DataFrame = benchmark
         self.method: str = method
@@ -45,9 +45,8 @@ class Metrics:
 
     def compute_performance(self)->dict:
         """
-        Méthode permettant de calculer le rendement annualisé d'une stratégie.
-        Intérêt dans le cadre du projet : comparer la performance du nouveau pilier (action / obligation) avec
-        celui de la grille de départ
+        Méthode permettant de calculer le rendement annualisé et le rendement total d'une stratégie.
+        :return: dictionnaire contenant le rendement annualisé et le rendement total
         """
 
         # Récupération des rendements
@@ -60,17 +59,20 @@ class Metrics:
         annualized_return: float = (1+total_return) ** (self.annualization_factor / ret_ptf.shape[0]) - 1
         return {"total_return": total_return, "annualized_return": annualized_return}
 
-    def compute_annualized_vol(self):
+    def compute_annualized_vol(self)->float:
         """
-        Méthode permettant de calculer la volatilité annualisée d'une stratégie
+        Méthode permettant de calculer la volatilité annualisée d'un portefeuille
+        :return: volatilité annualisée d'un portefeuille
         """
         ptf_ret: pd.DataFrame = self.utils.compute_asset_returns(self.nav, self.frequency, self.method)
         vol: float = np.std(ptf_ret)
         return vol * np.sqrt(self.annualization_factor)
 
-    def compute_sharpe_ratio(self, rf:float = 0):
+    def compute_sharpe_ratio(self, rf:float = 0)->float:
         """
-        Méthode permettant de calculer le sharpe ratio de l'investissement
+        Méthode permettant de calculer le Sharpe ratio d'un portefeuille
+        :param rf: taux sans risque (0 par hypothèse)
+        :return: sharpe ratio du portefeuille
         """
         ann_ret:float = self.compute_performance()["annualized_return"]
         ann_vol: float = self.compute_annualized_vol()
@@ -79,8 +81,8 @@ class Metrics:
 
     def compute_downside_vol(self)->float:
         """
-        Méthode permettant de calculer la volatilité à la baisse
-        :return:
+        Méthode permettant de calculer la volatilité à la baisse du portefeuille
+        :return: volatilité à la baisse du portefeuille
         """
 
         # Etape 1 : calcul de la différence entre rendement et taux sans risuqe (= rendement) et
@@ -94,10 +96,10 @@ class Metrics:
         # Etape 3 : Récupération de la downside vol annualisée
         return downside_vol * np.sqrt(self.annualization_factor)
 
-    def compute_sortino(self, rf:float = 0):
+    def compute_sortino(self, rf:float = 0)->float:
         """
-        Méthode permettant de calculer le ratio de Sortino
-        :return:
+        Méthode permettant de calculer le ratio de Sortino du portefeuille
+        :return: ratio de Sortino du portefeuille
         """
         ann_ret:float = self.compute_performance()["annualized_return"]
         downside_vol: float = self.compute_annualized_vol()
@@ -108,8 +110,8 @@ class Metrics:
 
     def compute_beta_and_alpha(self) -> dict:
         """
-        Méthode permettant de calculer le beta entre l'indice et le portefeuille
-        :return:
+        Méthode permettant de calculer le beta et l'alpha du portefeuille
+        :return: Dictionnaire contenant le beta et l'alpha du portefeuille
         """
 
         # Etape 1 : Calcul des rendements de l'indice et du portefeuille
@@ -130,10 +132,10 @@ class Metrics:
 
         return {'alpha':alpha, 'beta':beta}
 
-    def compute_tracking_error(self):
+    def compute_tracking_error(self)->float:
         """
         Méthode permettant de calculer la tracking error du fonds
-        :return:
+        :return: Tracking error du fonds
         """
 
         # Etape 1 : Calcul des rendements du portefeuille et du bench
@@ -151,7 +153,7 @@ class Metrics:
         """
         Méthode permettant de calculer le max draw down
         d'un portefeuille
-        :return:
+        :return: MaxDrawDown du portefeuille
         """
 
         # Etape 1 : initialisation du hwm et de la liste contenant les drawdowns
@@ -171,14 +173,12 @@ class Metrics:
         # Etape 3 : calcul du max drawdown
         return min(list_drawdowns)
 
-    """
-    A maj : plus nécessaire d'avoir bench et ptf
-    """
-
-    def synthesis(self,nom_ptf:str, df_stats_bench: pd.DataFrame = None):
+    def synthesis(self,nom_ptf:str, df_stats_bench: pd.DataFrame = None)->pd.DataFrame:
         """
-        Permet de comparer les performances d'un portefeuille avec celles d'un benchmark
-        précisé par l'utilisateur
+        Méthode de comparer les performances de plusieurs portefeuilles entre eux
+        :param nom_ptf: Nom du portefeuille étudié
+        :param df_stats_bench: DataFrame contenant statistiques des autres portefeuilles de références
+        :return: DataFrame contenant les statistiques de tous les portefeuilles
         """
         # Calcul des statistiques pour le portefeuille
         df_stats_fond:pd.DataFrame = self.display_stats()
@@ -189,14 +189,14 @@ class Metrics:
             return df_stats_fond
 
         # Comparaison par rapport au benchmark
-        df_results: pd.DataFrame = pd.concat([df_stats_fond, df_stats_bench], axis=1)
+        df_results: pd.DataFrame = pd.concat([df_stats_bench, df_stats_fond], axis=1)
         return df_results
 
-    def display_stats(self):
+    def display_stats(self)->pd.DataFrame:
         """
-        Méthode permettant d'afficher les différentes statistiques descriptives pour un portefeuille
+        Méthode permettant de calculer les statistiques descriptives du portefeuille
+        :return: DataFrame contenant les statistiques descriptives du portefeuille
         """
-
         #
         dict_perf: dict = self.compute_performance()
         dict_alpha: dict = self.compute_beta_and_alpha()
@@ -224,35 +224,4 @@ class Metrics:
             "Tracking-error du portefeuille en %":round(te*100,2),
             "MaxDrawDown":round(mdd,2)
         }
-        """
-        print(f"Rendement annualisé du portefeuille (en %) : {round(ann_ret * 100, 2)}.")
-        print(f"Volatilité annualisée du portefeuille (en %) : {round(ann_vol * 100, 2)}.")
-        print(f"Sharpe ratio annualisé du portefeuille : {round(sharpe,2)}.")
-        print(f"Total return du portefeuille (en %) : {round(tot_ret * 100, 2)}")
-        print(f"Vol à la baisse du portefeuille annualisée : {round(downside_vol*100, 2)}")
-        print(f"Ratio de sortino annualisé du portefeuille : {round(sortino,2)}")
-        print(f"Alpha du portefeuille annualisé : {alpha}")
-        print(f"Beta du portefeuille : {beta}")
-        print(f"Tracking-error du portefeuille : {te}")
-        print(f"Max Draw Down du portefeuille : {mdd}")
-        """
         return pd.DataFrame.from_dict(stats_dict, orient='index')
-
-    """
-    def display_bench_stats(self):
-
-        #Méthode pour afficher les statistiques du benchmark
-        if self.bench.empty:
-            raise Exception("Aucun benchmark renseigné")
-
-        bench_ret: pd.DataFrame = self.compute_returns(self.bench)
-        ann_ret: float = self.compute_performance(self.bench, bench_ret)["annualized_return"]
-        ann_vol: float = self.compute_annualized_vol(bench_ret)
-        tot_ret: float = self.compute_performance(self.bench, bench_ret)["total_return"]
-        sharpe: float = self.compute_sharpe_ratio(self.bench, bench_ret)
-
-        print(f"Rendement annualisé du benchmark (en %) : {round(ann_ret * 100, 2)}.")
-        print(f"Volatilité annualisée du benchmark (en %) : {round(ann_vol * 100, 2)}.")
-        print(f"Sharpe ratio du benchmark : {round(sharpe,2)}.")
-        print(f"Total return du benchmark (en %) : {round(tot_ret * 100, 2)}")
-    """

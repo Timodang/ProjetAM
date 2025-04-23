@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from enum import Enum
 
 from scipy.optimize import minimize
-from scipy.optimize import LinearConstraint
 
 import numpy as np
 import pandas as pd
@@ -32,12 +31,12 @@ class MaxSharpeWeighting(WeightingScheme):
     Classe permettant de construire les poids d'un portefeuille
     en maximisant le sharpe ratio
     """
-    def compute_weights(self, signals: pd.DataFrame):
+    def compute_weights(self, signals: pd.DataFrame) -> list:
         """
         Méthode permettant de construire le portefeuille qui maximise
         le ratio de Sharpe
-        :param signals:
-        :return:
+        :param signals: rendements à utiliser
+        :return: liste des poids après optimisation
         """
 
         # Récupération du nombre d'actifs
@@ -53,7 +52,6 @@ class MaxSharpeWeighting(WeightingScheme):
         cov:np.ndarray = np.cov(signals.T)
 
         # définition des contraintes
-        # constraints = LinearConstraint(np.ones(n_assets), 1, 1)
         constraints: dict = ({'type':'eq', 'fun':lambda x:np.sum(x)-1})
         bounds:tuple = tuple((0,1) for _ in range(n_assets))
 
@@ -74,10 +72,10 @@ class MaxSharpeWeighting(WeightingScheme):
         """
         Méthode permettant de calculer l'opposée du sharpe ratio du portefeuille que l'on minimise
         pour déterminer les poids
-        :param returns:
-        :param cov:
-        :param weights:
-        :return:
+        :param returns: rendements à utiliser
+        :param cov: matrice de variance covariance des rendements
+        :param weights: poids des titres
+        :return: sharpe ratio annualisé du portefeuille
         """
         try:
             # calcul du rendement moyen du portefeuille
@@ -147,7 +145,7 @@ class RankingWeightingSignals(WeightingScheme):
         nb_stocks: int = int(np.ceil(ranks.shape[0] * self.quantile))
 
         # Récupération des titres sur lesquels on prend position
-        top_ranks:pd.Series = ranks.nlargest(nb_stocks)
+        top_ranks:pd.Series = ranks.nlargest(nb_stocks+1)
 
         # somme des rangs
         top_ranks_sum:pd.Series = top_ranks.sum()
