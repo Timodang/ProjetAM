@@ -103,6 +103,26 @@ class Portfolio:
         portfolio_value: list = self.compute_portfolio_value()
         self.portfolio_value = pd.DataFrame(portfolio_value, columns = ["Nav"], index = self.positions.index)
 
+    def rebalancing_date_2(self, serie_date:pd.Series, index:int) -> datetime:
+        """
+        Méthode permettant de déterminer la prochaine date de rebalancement à partir d'une liste de données mensuelles
+        contenant toutes les dates de la période d'étude
+        :param serie_date:
+        :param index:
+        :return:
+        """
+
+        if self.rebalancement == Portfolio.MONTHLY_LABEL:
+            new_date: datetime = serie_date.values[index + 1]
+        elif self.rebalancement == Portfolio.QUARTERLY_LABEL:
+            new_date: datetime = serie_date.values[index + 3]
+        elif self.rebalancement == Portfolio.YEARLY_LABEL:
+            new_date: datetime = serie_date.values[index + 12]
+        else:
+            raise Exception("Fréquence de rebalancement non implémentée")
+        return new_date
+
+
     def rebalancing_date(self, prec_date: datetime = None) -> datetime:
         """
         Méthode permettant de calculer la nouvelle date de rebalancement
@@ -121,11 +141,30 @@ class Portfolio:
 
         return next_rebalancing_date
 
+    def _rebal_to_index(self) -> int:
+        """
+        Méthode permettant de convertir une fréquence de rebalancement en nombre à partir de données mensuelles
+        (ex : rebalancement annuelle pour données mensuelles => 12)
+        :return:
+        """
+        if self.rebalancement == Portfolio.MONTHLY_LABEL:
+            index_rebal:int  = 1
+        elif self.rebalancement == Portfolio.QUARTERLY_LABEL:
+            index_rebal:int = 3
+        elif self.rebalancement == Portfolio.YEARLY_LABEL:
+            index_rebal:int = 12
+        else:
+            raise Exception("La fréquence de rebalancement souhaitée n'est pas implémentée")
+        return index_rebal
+
     def build_portfolio(self) -> pd.DataFrame:
         """
         Méthode  pour calculer la valeur du portefeuille
         strategy : Momentum
         """
+
+        # récupération de l'indice des rebalancements
+        int_rebal_freq: int = self._rebal_to_index()
 
         # On récupère le nombre de rendements disponibles
         length: int = self.returns.shape[0]
@@ -133,7 +172,8 @@ class Portfolio:
         # Récupération de la première date de rebalancement
         rebalancing_date: datetime = self.returns.index[self.calculation_window]
         # premier indice à partir duquel on réalise les calculs
-        index_strat: int = self.calculation_window
+        # index_strat: int = self.calculation_window * 3
+        index_strat: int = 36
 
         # Initialisation du dataframe de positions / poids
         positions: pd.DataFrame = pd.DataFrame(0.0, index=self.returns.index,
@@ -150,10 +190,12 @@ class Portfolio:
             if date >= rebalancing_date:
 
                 # Récupération du premier indice pour le calcul des rendements
-                begin_idx: int = idx - self.calculation_window
+                # begin_idx: int = idx - self.calculation_window * 3
+                begin_idx: int = idx - 36
 
-                # Calcule de la nouvelle date de rebalancement
-                rebalancing_date = self.rebalancing_date(rebalancing_date)
+                # Calcule de la nouvelle date de rebalancement tant qu'on est pas à la dernière date
+                if idx < length - int_rebal_freq:
+                    rebalancing_date = self.rebalancing_date_2(self.returns.index, idx)
 
                 # Récupération des signaux associés à cette date selon les stratégies / schémas implémentés
                 positions.iloc[idx, :] = self._compute_portfolio_position(
@@ -167,7 +209,7 @@ class Portfolio:
                 positions.iloc[idx, :] = self.compute_portfolio_derive(idx, prec_weights)
 
         # On ne conserve pas les dates inférieures avant la première date de rebalancement
-        positions = positions.iloc[self.calculation_window:, ]
+        positions = positions.iloc[index_strat:, ]
         return positions
 
     def _compute_portfolio_position(self, returns_to_use: pd.DataFrame, strategy:str, weighting:str) -> list:
@@ -229,7 +271,7 @@ class Portfolio:
 
         # distinction selon les différentes stratégies implémentées : Momentul
         if strategy == Portfolio.MOMENTUM_LABEL:
-            strategy_instance: Momentum = Momentum(returns_to_use, self.universe,
+            strategy_instance: Momentum = Momentum(returns_to_use.iloc[-self.calculation_window:], self.universe,
                                                     weighting, self.quantile)
         # Stratégie Momentum idiosyncratique
         elif strategy == Portfolio.MOMENTUM_IDIOSYNCRATIC_LABEL:
@@ -239,7 +281,7 @@ class Portfolio:
                                                     weighting, self.quantile)
         # Stratégie Max Sharpe
         elif strategy == Portfolio.MAX_SHARPE_LABEL:
-            strategy_instance: MaxSharpe = MaxSharpe(returns_to_use, self.universe,
+            strategy_instance: MaxSharpe = MaxSharpe(returns_to_use.iloc[-self.calculation_window:], self.universe,
                                                     weighting, self.quantile)
         # Erreur pour toute autre stratégie
         else:
@@ -260,6 +302,7 @@ class Portfolio:
 
         # récupération des rendements en remplaçant les valeurs manquantes par des 0 pour les calculs
         returns:pd.DataFrame = self.returns.fillna(0)
+        returns.replace(-np.inf, 0, inplace=True)
 
         # Test sur les dimensions pour vérifier que les calculs sont réalisables
         if len(list_prec_weights) != len(returns.iloc[idx - 1, :]):
@@ -297,6 +340,7 @@ class Portfolio:
         # Pour le calcul de la valeur du portefeuille, les valeurs manquantes sont remplacées par des 0
         returns.replace(np.nan, 0, inplace=True)
         returns.replace(np.inf, 0, inplace=True)
+        returns.replace(-np.inf, 0, inplace=True)
 
         # Vérifications élémentaires
         if positions.isna().any().any():

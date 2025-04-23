@@ -151,9 +151,9 @@ Première question : Stratégie Momentum
 """
 
 # Etape 1 : définition de la stratégie à mettre en oeuvre
-strat = 'momentum idiosyncratique'
+strat = 'momentum'
 calculation_window:int = 12
-periodicity: str = 'monthly'
+periodicity: str = 'quarterly'
 
 # Etape 2 : initialisation des listes utiliser pour stocker les résultats du backtest pour plusieurs configuration
 list_nav_max_sharpe: list = []
@@ -165,13 +165,13 @@ ptf_momentum: Portfolio = Portfolio(df_msci_stocks,
                                     bench=msci_index,
                                     dict_sector=dict_tickers_sectors,
                                     periodicity=periodicity,
-                                    rebalancement=list_rebalancing[0],
+                                    rebalancement=list_rebalancing[1],
                                     method=method,
                                     strat=strat,
                                     weighting=weighting,
                                     calculation_window=calculation_window,
                                     quantile=list_decile_ranking[0],
-                                    segmentation="sectorial")
+                                    segmentation=None)
 ptf_momentum.run_backtest()
 ptf_momentum_metrics: Metrics = Metrics(ptf_momentum.portfolio_value["Nav"], method,
                                         frequency=periodicity,

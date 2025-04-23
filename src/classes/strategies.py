@@ -2,6 +2,7 @@ import abc
 import pandas as pd
 import numpy as np
 import statsmodels.api as sm
+from skimage.filters import window
 from sqlalchemy.dialects.postgresql import array
 
 from src.classes.weighting_scheme import EquallyWeighting, RankingWeightingSignals, MaxSharpeWeighting
@@ -84,8 +85,11 @@ class Momentum(Strategy):
             returns = returns.iloc[:-1,:]
 
         # Calcul du rendement sur la période
-        list_sigals: list = (1 + returns).prod() - 1
         signals_momentum: pd.Series = (1 + returns).prod() - 1
+
+        # Dans le cas d'un momentum mean-revert, le signal est inversé
+        if returns.shape[0] == 1:
+            signals_momentum = -signals_momentum
 
         # Cas où l'utilisateur souhaite réaliser une allocation par ranking
         if self.weight_scheme == Strategy.RANKING_LABEL:
@@ -112,12 +116,13 @@ class IdiosyncraticMomentum(Strategy):
     Classe qui implémente une stratégie de Momentum idiosyncratique
     """
     def __init__(self, returns: pd.DataFrame, universe: pd.DataFrame, bench_ret:pd.DataFrame,
-                 weight_scheme: str, quantile:float) -> None:
+                 weight_scheme: str, quantile:float, window:int) -> None:
         self.returns: pd.DataFrame = returns
         self.bench_ret:pd.DataFrame = bench_ret
         self.universe: pd.DataFrame = universe
         self.weight_scheme: str = weight_scheme
         self.quantile: float = quantile
+        self.window: int = window
 
     @staticmethod
     def _import_ff_factors():
@@ -149,10 +154,6 @@ class IdiosyncraticMomentum(Strategy):
         # Retraitement des rendements
         returns, index_missing_data = self._clean_returns(self.returns, self.universe)
 
-        # Dans le cas d'un momentum qui n'est pas mean-revert, on ne conserve pas la dernière valeur (données mensuelles)
-        if returns.shape[0] > 1:
-            returns = returns.iloc[:-1,:]
-
         # Première étape : Importation des facteurs de FF (ou du bench, à voir)
         df_factors: pd.DataFrame = self.bench_ret
         # df_factors: pd.DataFrame = self._import_ff_factors()
@@ -167,9 +168,16 @@ class IdiosyncraticMomentum(Strategy):
         res = result.resid
 
         # Quatrième étape : récupération des signaux (= les résidus)
-        signals_id_momentum: pd.Series = (1 + res).prod() - 1
-        # bon signal, à revoir
-        # signals_id_momentum:  pd.Series = np.sum(res)/np.std(res)
+        test = res.iloc[-self.window:-1]
+        test1 = np.sum(res.iloc[-12:-1])
+        test2 = np.std(res.iloc[-12:-1])
+
+        # A ADAPTER
+        if self.window == 1:
+            # Sur du mean revert : on n'a qu'un résidu et on multiplie par -1 pour être long sur les winners
+            signals_id_momentum = -1 * res.iloc[-1]
+        else:
+            signals_id_momentum =  np.sum(res.iloc[-12:-1])/np.std(res.iloc[-12:-1])
 
         # Cinquième étape : calcul des poids
         # Cas où l'utilisateur souhaite réaliser une allocation par ranking
