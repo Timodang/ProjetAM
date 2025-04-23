@@ -82,8 +82,7 @@ class Momentum(Strategy):
 
         # Retraitement des rendements
         returns, index_missing_data = self._clean_returns(self.returns, self.universe)
-        if round(returns.iloc[0,0],4)==0.0245:
-            print("a")
+
         # Dans le cas d'un momentum qui n'est pas mean-revert, on ne conserve pas la dernière valeur (données mensuelles)
         if returns.shape[0] > 1:
             returns = returns.iloc[:-1,:]
