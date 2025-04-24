@@ -40,6 +40,7 @@ class Strategy(metaclass=abc.ABCMeta):
         :return: Un dataframe contenant les rendements qui sont utilisés pour la mise en oeuvre de la stratégie et
         un vecteur permettant de savoir si un actif est utilisé ou non
         """
+        returns:pd.DataFrame = returns.copy()
 
         # Dans le cas où il y a des valeurs infinies, on les remplace à 0
         returns.replace(np.inf, 0, inplace=True)
@@ -164,12 +165,18 @@ class IdiosyncraticMomentum(Strategy):
 
         # Deuxième étape : Alignement des rendements par rapport au portefeuille
         df_factors = df_factors[df_factors.index.isin(returns.index)]
+        tickers: list =  self.returns.columns.values
+        res: pd.DataFrame = pd.DataFrame()
 
         # Troisième étape : Régression pour calculer le beta de marché
         x = sm.add_constant(df_factors)
         model = sm.OLS(returns, x)
         result = model.fit()
         res = result.resid
+
+        # Cas particulier : si epsilon < -1, la définition du momentum idiosyncratique n'est plus valide
+        # Solution : remplacé les valeurs de résidu inférieures à -1 par -0.99
+        res[res <= -1] = -0.99
 
         # Quatrième étape : récupération des signaux (= les résidus)
         if self.window == 1:
@@ -178,6 +185,7 @@ class IdiosyncraticMomentum(Strategy):
         else:
             # Calcul du signal mean-revert
             signals_id_momentum =  np.sum(res.iloc[-12:-1])/np.std(res.iloc[-12:-1])
+            #signals_id_momentum = (1 + res).prod() - 1
 
         # Cinquième étape : calcul des poids
         # Cas où l'utilisateur souhaite réaliser une allocation par ranking

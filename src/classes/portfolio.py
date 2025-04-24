@@ -342,7 +342,7 @@ class Portfolio:
         for t in range(1, len(positions)):
 
             # récupération de l'indice pour les rendements (rendement en t + window - 1 pour la NAV en t)
-            ret_idx: int = self.calculation_window + (t - 1)
+            ret_idx: int = 36 + (t - 1)
 
             # Récupération des rendements de la période précédente
             list_asset_returns: list = returns.iloc[ret_idx, :].values.tolist()

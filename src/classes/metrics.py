@@ -102,7 +102,7 @@ class Metrics:
         :return: ratio de Sortino du portefeuille
         """
         ann_ret:float = self.compute_performance()["annualized_return"]
-        downside_vol: float = self.compute_annualized_vol()
+        downside_vol: float = self.compute_downside_vol()
         if downside_vol == 0:
             raise Exception("Calcul impossible pour une volatilité à la baisse nulle")
         sortino:float = (ann_ret - rf)/downside_vol
@@ -173,6 +173,23 @@ class Metrics:
         # Etape 3 : calcul du max drawdown
         return min(list_drawdowns)
 
+    def compute_information_ratio(self)->float:
+        """
+        Méthode permettant de calculer le ratio d'information d'un fonds
+        :return: ratio d'information d'un portefeuille
+        """
+
+        # Calcul du alpha et de la TE
+        dict_alpha: dict = self.compute_beta_and_alpha()
+        te: float = self.compute_tracking_error()
+
+        # Calcul dans les cas où c'est possible (= pas sur le benchmark)
+        if te == 0:
+            ir: float = 0
+        else:
+            ir: float = dict_alpha['alpha']/te
+        return ir
+
     def synthesis(self,nom_ptf:str, df_stats_bench: pd.DataFrame = None)->pd.DataFrame:
         """
         Méthode de comparer les performances de plusieurs portefeuilles entre eux
@@ -211,17 +228,19 @@ class Metrics:
         beta:float = dict_alpha['beta']
         te: float = self.compute_tracking_error()
         mdd:float = self.compute_max_draw_down()
+        ir: float = self.compute_information_ratio()
 
         stats_dict: dict = {
-            "Rendement annualisé en % ":round(ann_ret * 100, 2),
-            "Total return en %":round(tot_ret * 100, 2),
-            "Volatilité annualisée en %":round(ann_vol * 100, 2),
-            "Sharpe ratio annualisé":round(sharpe,2),
-            "Downside Vol annualisée en %":round(downside_vol*100, 2),
-            "Ratio de Sortino annualisé":round(sortino,2),
-            "Alpha":round(alpha,2),
-            "Beta":round(beta, 2),
-            "Tracking-error du portefeuille en %":round(te*100,2),
-            "MaxDrawDown":round(mdd,2)
+            "Rendement annualisé en % ":round(ann_ret * 100, 4),
+            "Total return en %":round(tot_ret * 100, 4),
+            "Volatilité annualisée en %":round(ann_vol * 100, 4),
+            "Sharpe ratio annualisé":round(sharpe,4),
+            "Downside Vol annualisée en %":round(downside_vol*100, 4),
+            "Ratio de Sortino annualisé":round(sortino,4),
+            "Alpha":round(alpha,4),
+            "Beta":round(beta, 4),
+            "Tracking-error du portefeuille en %":round(te*100,4),
+            "Ratio d'information en %":round(ir,4),
+            "MaxDrawDown":round(mdd,4)
         }
         return pd.DataFrame.from_dict(stats_dict, orient='index')

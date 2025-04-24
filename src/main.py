@@ -86,11 +86,15 @@ Import du MSCI World et présentation des performances
 """
 
 # Import du MSCI World
-msci_index: pd.DataFrame = pd.read_excel("data/NAV MSCI World.xlsx")
+msci_index: pd.DataFrame = pd.read_excel("data/NAV MSCI World.xlsx", sheet_name="NAV MSCI 2007")
 msci_index.set_index("Dates", inplace=True)
 
+# Import du MSCI World rebasé à 100 en 2010 (pour la comparaison des performances vs portefeuille)
+msci_index_2010: pd.DataFrame = pd.read_excel("data/NAV MSCI World.xlsx", sheet_name="NAV MSCI 2010")
+msci_index_2010.set_index("Dates", inplace=True)
+
 # Calcul des performances
-msci_perf: Metrics = Metrics(msci_index['MSCI World'], "discret", "monthly", msci_index['MSCI World'])
+msci_perf: Metrics = Metrics(msci_index_2010['MSCI World'], "discret", "monthly", msci_index_2010['MSCI World'])
 print("Affichage des performances pour le MSCI world : ")
 df_msci_stats: pd.DataFrame = msci_perf.synthesis("Benchmark")
 
@@ -128,9 +132,9 @@ selon plusieurs configurations possibles
 # Etape 1 : définition de la stratégie à mettre en oeuvre
 strat = 'momentum idiosyncratique'
 # Dans le cas d'une stratégie Mean Reverting, il faut utiliser un fenêtre d'un mois
-calculation_window:int = 1
+calculation_window:int = 12
 # Nom de la stratégie
-nom: str = "Momentum Idiosyncratique Mean Revert 1 mois - "
+nom: str = ("Momentum 12 mois - ")
 
 # Etape 2 : Initialisation du dataframe utilisé pour stocker les NAV
 df_nav: pd.DataFrame = pd.DataFrame()
@@ -182,5 +186,5 @@ for segmentation in list_segmentation:
 
 # Sauvegarde et export des résultats
 if save:
-    df_nav.to_excel("Résultats stratégie Momentum idiosyncratique Mean Revert.xlsx")
-    stat_ptf.to_excel("Performances stratégie Momentum idiosyncratique Mean Revert.xlsx")
+    df_nav.to_excel("Résultats stratégie Momentum  Blitz.xlsx")
+    stat_ptf.to_excel("Performances stratégie Momentum  Blitz.xlsx")
