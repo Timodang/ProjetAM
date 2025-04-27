@@ -186,8 +186,8 @@ for segmentation in list_segmentation:
 
 # Sauvegarde et export des résultats
 if save:
-    df_nav.to_excel("Résultats stratégie Momentum.xlsx")
-    stat_ptf.to_excel("Performances stratégie Momentum.xlsx")
+    df_nav.to_excel("results/Résultats stratégie Momentum.xlsx")
+    stat_ptf.to_excel("results/Performances stratégie Momentum.xlsx")
 
 
 """
@@ -238,5 +238,5 @@ stat_ptf:pd.DataFrame = ptf_metrics.synthesis(nom_ptf, df_msci_stats)
 
 # Sauvegarde et export des résultats
 if save:
-    df_nav.to_excel("Résultats stratégie Max Sharpe.xlsx")
-    stat_ptf.to_excel("Performances stratégie Max Sharpe.xlsx")
+    df_nav.to_excel("results/Résultats stratégie Max Sharpe.xlsx")
+    stat_ptf.to_excel("results/Performances stratégie Max Sharpe.xlsx")
