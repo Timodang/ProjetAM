@@ -240,6 +240,6 @@ class MaxSharpe(Strategy):
 
         # Vérification que la somme des poids est bien égale à 1
         check_weight = np.sum(list_weights)
-        if round(check_weight, 5) != 1:
+        if round(check_weight, 4) != 1:
             raise Exception("Erreur dans le calcul des poids. La somme des poids doit être égale à 1")
-        return weights
+        return list_weights

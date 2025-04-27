@@ -35,7 +35,7 @@ class Portfolio:
 
     def __init__(self, df_prices: pd.DataFrame, universe:pd.DataFrame, bench:pd.DataFrame, dict_sector: dict,
                  periodicity: str, rebalancement: str, method: str,
-                 strat: str, weighting: str, calculation_window: int, quantile: float, segmentation:str = None):
+                 strat: str, weighting: str, calculation_window: int, quantile: float = None, segmentation:str = None):
         """
         :param df_prices: DataFrame contenant les prix de tous les actifs sur la période d'étude
         :param universe: DataFrame contenant la composition de l'univers d'investissement à chaque date

@@ -43,7 +43,7 @@ class MaxSharpeWeighting(WeightingScheme):
         n_assets: int = signals.shape[1]
 
         # calcul des poids initiaux
-        x0: np.ndarray = np.ones(n_assets)/n_assets
+        x0: np.ndarray = np.ones(n_assets)/n_assets * 100
 
         # Récupération du rendement moyen de chaque actif
         returns: list= signals.describe().iloc[1,:].values.tolist()
@@ -60,12 +60,19 @@ class MaxSharpeWeighting(WeightingScheme):
                           args = (returns, cov),
                           method = "SLSQP",
                           bounds = bounds,
-                          constraints = constraints,
-                          options = {'ftol':1e-9})
+                          constraints = constraints)
 
-        # Récupération des poids
-        print(np.sum(result.x))
-        return result.x
+        # Si l'optimisation réussit, on récupère les nouveaux poids
+        if result.success:
+            weights = result.x
+
+        # Si l'optimisation échoue, on l'indique
+        else:
+            print(f"L'optimisation a échoué. Message: {result.message}")
+            # On utilise les poids initiaux en cas d'échec
+            weights = x0 / 100
+
+        return weights
 
     @staticmethod
     def _calc_portfolio_sharpe(weights:np.ndarray, returns:list, cov:np.ndarray) -> float:
@@ -79,7 +86,7 @@ class MaxSharpeWeighting(WeightingScheme):
         """
         try:
             # calcul du rendement moyen du portefeuille
-            ptf_ret:float = np.sum(np.multiply(weights.T, returns)) * 12
+            ptf_ret:float = np.sum(np.multiply(weights.T, returns))  * 12
 
             # Calcul de la volatilité
             ptf_vol: float = np.sqrt(weights.T @ (cov @ weights) * 12)
