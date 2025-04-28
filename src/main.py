@@ -58,13 +58,13 @@ Import des données
 """
 
 # Import des données contenant les compositions mensuelles du S&P 500
-df_compo:pd.DataFrame = pd.read_excel('data/Master 272 - AM - Projet indices.xlsx', sheet_name="Composition MSCI World")
+df_compo:pd.DataFrame = pd.read_excel('src/data/Master 272 - AM - Projet indices.xlsx', sheet_name="Composition MSCI World")
 df_compo.set_index("Dates", inplace=True)
 # Les valeurs manquantes sont remplacées par des 0
 df_compo.fillna(0, inplace=True)
 
 # Import des données contenant les prix des stocks du MSCI et retraitements
-df_msci_stocks: pd.DataFrame = pd.read_excel('data/Final Database MSCI stocks.xlsx')
+df_msci_stocks: pd.DataFrame = pd.read_excel('src/data/Final Database MSCI stocks.xlsx')
 df_msci_stocks.set_index("Dates", inplace=True)
 df_msci_stocks = df_msci_stocks.apply(lambda series: series.loc[:series.last_valid_index()].ffill())
 # Les valeurs manquantes sont remplacées par des 0 pour réaliser les traitements ultérieures
@@ -72,7 +72,7 @@ df_msci_stocks.replace(np.nan, 0, inplace=True)
 df_msci_stocks.fillna(0, inplace=True)
 
 # Import des données relatives au secteur de chaque ticker
-df_sector: pd.DataFrame = pd.read_excel('data/Master 272 - AM - Projet indices.xlsx', sheet_name="Secteurs")
+df_sector: pd.DataFrame = pd.read_excel('src/data/Master 272 - AM - Projet indices.xlsx', sheet_name="Secteurs")
 df_sector.set_index("Ticker", inplace = True)
 
 # Réalisation du mapping sectoriel
@@ -86,11 +86,11 @@ Import du MSCI World et présentation des performances
 """
 
 # Import du MSCI World
-msci_index: pd.DataFrame = pd.read_excel("data/NAV MSCI World.xlsx", sheet_name="NAV MSCI 2007")
+msci_index: pd.DataFrame = pd.read_excel("src/data/NAV MSCI World.xlsx", sheet_name="NAV MSCI 2007")
 msci_index.set_index("Dates", inplace=True)
 
 # Import du MSCI World rebasé à 100 en 2010 (pour la comparaison des performances vs portefeuille)
-msci_index_2010: pd.DataFrame = pd.read_excel("data/NAV MSCI World.xlsx", sheet_name="NAV MSCI 2010")
+msci_index_2010: pd.DataFrame = pd.read_excel("src/data/NAV MSCI World.xlsx", sheet_name="NAV MSCI 2010")
 msci_index_2010.set_index("Dates", inplace=True)
 
 # Calcul des performances
@@ -128,6 +128,61 @@ list_ptf_name: list = ["Monthly decile without segmentation",
 Stratégie à backtester
 selon plusieurs configurations possibles
 """
+
+"""
+Backtest du portefeuille max sharpe
+"""
+# Configuration différente des autres stratégies car les calculs ne sont appliqués qu'avec la segmentation,
+# et les quantiles n'interviennent pas
+# Etape 1 : définition de la stratégie à mettre en oeuvre
+strat = 'max sharpe'
+# Dans le cas d'une stratégie Mean Reverting, il faut utiliser un fenêtre d'un mois
+calculation_window:int = 12
+# Nom de la stratégie
+nom: str = ("Max Sharpe 12 mois - ")
+
+# Etape 2 : Initialisation du dataframe utilisé pour stocker les NAV
+df_nav: pd.DataFrame = pd.DataFrame()
+
+# Etape 3 : Calcul des NAV et de la performance de la stratégie pour toutes les configurations sélectionnées
+ptf: Portfolio = Portfolio(df_msci_stocks,
+                                    universe=df_compo,
+                                    bench=msci_index,
+                                    dict_sector=dict_tickers_sectors,
+                                    periodicity=periodicity,
+                                    rebalancement="quarterly",
+                                    method=method,
+                                    strat=strat,
+                                    weighting=weighting,
+                                    calculation_window=calculation_window,
+                                    quantile=None,
+                                    segmentation="sectorial")
+
+# Réalisation du backtest
+ptf.run_backtest()
+
+# Calcul des métriques de risque et de performance
+ptf_metrics: Metrics = Metrics(ptf.portfolio_value["Nav"], method,
+                                        frequency=periodicity,
+                                        benchmark = msci_index['MSCI World'])
+
+# Récupération du nom du portefeuille
+nom_ptf: str = nom + "Quarterly with sectorial segmentation"
+
+# Stockage de la NAV
+df_nav[nom_ptf] = ptf.portfolio_value['Nav']
+
+# Stockage des métriques
+stat_ptf:pd.DataFrame = ptf_metrics.synthesis(nom_ptf, df_msci_stats)
+
+# Sauvegarde et export des résultats
+save = True
+if save:
+    df_nav.to_excel("Résultats stratégie Max Sharpe 2.xlsx")
+    stat_ptf.to_excel("Performances stratégie Max Sharpe 2.xlsx")
+
+save = False
+
 
 # Etape 1 : définition de la stratégie à mettre en oeuvre
 strat = 'momentum'
@@ -190,53 +245,3 @@ if save:
     stat_ptf.to_excel("results/Performances stratégie Momentum.xlsx")
 
 
-"""
-Backtest du portefeuille max sharpe
-"""
-# Configuration différente des autres stratégies car les calculs ne sont appliqués qu'avec la segmentation,
-# et les quantiles n'interviennent pas
-# Etape 1 : définition de la stratégie à mettre en oeuvre
-strat = 'max sharpe'
-# Dans le cas d'une stratégie Mean Reverting, il faut utiliser un fenêtre d'un mois
-calculation_window:int = 12
-# Nom de la stratégie
-nom: str = ("Max Sharpe 12 mois - ")
-
-# Etape 2 : Initialisation du dataframe utilisé pour stocker les NAV
-df_nav: pd.DataFrame = pd.DataFrame()
-
-# Etape 3 : Calcul des NAV et de la performance de la stratégie pour toutes les configurations sélectionnées
-ptf: Portfolio = Portfolio(df_msci_stocks,
-                                    universe=df_compo,
-                                    bench=msci_index,
-                                    dict_sector=dict_tickers_sectors,
-                                    periodicity=periodicity,
-                                    rebalancement="quarterly",
-                                    method=method,
-                                    strat=strat,
-                                    weighting=weighting,
-                                    calculation_window=calculation_window,
-                                    quantile=None,
-                                    segmentation="sectorial")
-
-# Réalisation du backtest
-ptf.run_backtest()
-
-# Calcul des métriques de risque et de performance
-ptf_metrics: Metrics = Metrics(ptf.portfolio_value["Nav"], method,
-                                        frequency=periodicity,
-                                        benchmark = msci_index['MSCI World'])
-
-# Récupération du nom du portefeuille
-nom_ptf: str = nom + "Quarterly with sectorial segmentation"
-
-# Stockage de la NAV
-df_nav[nom_ptf] = ptf.portfolio_value['Nav']
-
-# Stockage des métriques
-stat_ptf:pd.DataFrame = ptf_metrics.synthesis(nom_ptf, df_msci_stats)
-
-# Sauvegarde et export des résultats
-if save:
-    df_nav.to_excel("results/Résultats stratégie Max Sharpe.xlsx")
-    stat_ptf.to_excel("results/Performances stratégie Max Sharpe.xlsx")
