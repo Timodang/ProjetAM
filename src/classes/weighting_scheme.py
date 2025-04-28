@@ -38,42 +38,69 @@ class MaxSharpeWeighting(WeightingScheme):
         :param signals: rendements à utiliser
         :return: liste des poids après optimisation
         """
-
         # Récupération du nombre d'actifs
         n_assets: int = signals.shape[1]
-
-        # calcul des poids initiaux
-        x0: np.ndarray = np.ones(n_assets)/n_assets * 100
-
+ 
         # Récupération du rendement moyen de chaque actif
-        returns: list= signals.describe().iloc[1,:].values.tolist()
+        returns: list = signals.describe().iloc[1,:].values.tolist()
+    
+        """
+        On régularise la matrice de covariance. En effet, étant donné le nombre 
+        considérable d'actifs considérés, cette régularisation est nécessaire
+        pour que l'optimisation fonctionne. 
+        """
+        epsilon = 0.01 
+        cov: np.ndarray = np.cov(signals.T) + np.eye(n_assets) * epsilon
+    
+        # On vérifie que les données (en particulier les covariances) sont bien calculées
+        if np.any(np.isnan(returns)) or np.any(np.isnan(cov)):
+            print("Données avec NaN détectées, retour à équipondération")
+            return [1.0/n_assets] * n_assets
+    
+        # On considère deux méthodes d'optimisation, au cas où la première échoue
+        methods = ["SLSQP", "trust-constr"]
+    
+        for method in methods:
+            try:
+                # Poids initiaux équipondérés
+                x0 = np.ones(n_assets)/n_assets
+            
+                # Contrainte sur la sommation à 1 des poids
+                constraints = ({'type':'eq', 'fun':lambda x: np.sum(x)-1})
 
-        # Calcul de la matrice de variance covariance entre tous les actifs
-        cov:np.ndarray = np.cov(signals.T)
-
-        # définition des contraintes
-        constraints: dict = ({'type':'eq', 'fun':lambda x:np.sum(x)-1})
-        bounds:tuple = tuple((0,1) for _ in range(n_assets))
-
-        # optimisation
-        result = minimize(self._calc_portfolio_sharpe, x0,
-                          args = (returns, cov),
-                          method = "SLSQP",
-                          bounds = bounds,
-                          constraints = constraints)
-
-        # Si l'optimisation réussit, on récupère les nouveaux poids
-        if result.success:
-            weights = result.x
-
-        # Si l'optimisation échoue, on l'indique
-        else:
-            print(f"L'optimisation a échoué. Message: {result.message}")
-            # On utilise les poids initiaux en cas d'échec
-            weights = x0 / 100
-
-        return weights
-
+                # Bornes pour les poids (long-only)
+                bounds = tuple((0,1) for _ in range(n_assets))
+            
+                # Options d'optimisation 
+                options = {
+                    'maxiter': 2000, 
+                    'disp': True,
+                    'ftol': 1e-6,  
+                }
+            
+                # Lancement 
+                result = minimize(
+                    self._calc_portfolio_sharpe, 
+                    x0,
+                    args=(returns, cov),
+                    method=method,
+                    bounds=bounds,
+                    constraints=constraints,
+                    options=options
+                )
+            
+                # Si l'optmisation réussit, on récupère les nouveaux poids
+                if result.success:
+                    weights = result.x
+                    # On normalise pour s'assurer que la somme est 1
+                    weights = weights / np.sum(weights)
+                    return weights.tolist()
+                else:
+                    print(f"Méthode {method} n'a pas convergé: {result.message}")
+                
+            except Exception as e:
+                print(f"Méthode {method} a échoué: {e}")
+    
     @staticmethod
     def _calc_portfolio_sharpe(weights:np.ndarray, returns:list, cov:np.ndarray) -> float:
         """
